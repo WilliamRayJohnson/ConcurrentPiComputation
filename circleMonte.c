@@ -57,6 +57,7 @@ int main(int argc, char *argv[]) {
     checkBarrier = (pthread_barrier_t *) malloc(sizeof(pthread_barrier_t));
     pthread_barrier_init(checkBarrier, NULL, threadCount + 1);
 
+    // Initialize lock on rand() function
     rand_lock = (pthread_mutex_t *) malloc(sizeof(pthread_mutex_t));
     pthread_mutex_init(rand_lock, NULL);
 
@@ -108,6 +109,9 @@ int main(int argc, char *argv[]) {
     exit(0);
 }
 
+/**
+ * Performs a monte carlo experiment between a certian range
+ */
 double monteExperiment(double min, double max) {
     double value;
     double range = (max - min);
@@ -116,6 +120,9 @@ double monteExperiment(double min, double max) {
     return value;
 }
 
+/**
+ * Calculates the distance between two points on a grid
+ */
 double calcDistance(double xOne, double yOne, double xTwo, double yTwo) {
     double xPart = pow((xTwo - xOne), 2.0);
     double yPart = pow((yTwo - yOne), 2.0);
@@ -123,6 +130,11 @@ double calcDistance(double xOne, double yOne, double xTwo, double yTwo) {
     return distance;
 }
 
+/**
+ * The monte carlo worker thread that performs a certain number of simulations
+ * and adds the count of successful and total experiments to a global variable
+ * to be processed by the control thread
+ */
 void *monteWorker(void *arg) {
     Worker_Input *input = (Worker_Input *) arg;
     double experimentX;
@@ -136,6 +148,7 @@ void *monteWorker(void *arg) {
     while(!*experimentsDone) {
         successfulExperiments = 0;
         totalExperiments = 0;
+        // Perform experiments
         for (i = 0; i < input->experimentCount; i++) {
             pthread_mutex_lock(rand_lock);
             experimentX = monteExperiment(0.0, CIRCLE_DIAMETER);
@@ -158,13 +171,19 @@ void *monteWorker(void *arg) {
         totalCount->value += totalExperiments;
         pthread_mutex_unlock(totalCount->lock);
 
+        // Wait for all worker threads to finish experiments
         pthread_barrier_wait(calcBarrier);
+        // Wait for control thread to finish estimation of pi
         pthread_barrier_wait(checkBarrier);
     }
 
     pthread_exit(NULL);
 }
 
+/**
+ * Estimates pi once workers have finished experiments. Ends experiments if
+ * previous and current pi estimation is within a certain delta.
+ */
 void *monteControl(void *arg) {
     double *delta = (double *) arg;
     double circleRadius = CIRCLE_DIAMETER / 2.0;
@@ -174,6 +193,7 @@ void *monteControl(void *arg) {
     int round = 0;
 
     while(!*experimentsDone) {
+        // Wait for all worker threads to finish experiments
         pthread_barrier_wait(calcBarrier);
 
         pthread_mutex_lock(successCount->lock);
@@ -190,6 +210,7 @@ void *monteControl(void *arg) {
         pastPiEstimation = currPiEstimation;
 
         round++;
+        // 'Wait' to signal workers to start again
         pthread_barrier_wait(checkBarrier);
     }
 
