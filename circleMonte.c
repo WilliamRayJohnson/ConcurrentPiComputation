@@ -34,6 +34,7 @@ pthread_mutex_t *rand_lock;
 
 pthread_barrier_t *calcBarrier;
 pthread_barrier_t *checkBarrier;
+bool *experimentsDone;
 
 int main(int argc, char *argv[]) {
     int threadCount;
@@ -68,6 +69,8 @@ int main(int argc, char *argv[]) {
     totalCount->value = 0;
     totalCount->lock = (pthread_mutex_t *) malloc(sizeof(pthread_mutex_t));
     pthread_mutex_init(totalCount->lock, NULL);
+    experimentsDone = (bool *) malloc(sizeof(bool));
+    *experimentsDone = false;
 
     // Initialize cooridinator thread
     pthread_t *coordinatorThd = (pthread_t *) malloc(sizeof(pthread_t));
@@ -122,7 +125,6 @@ double calcDistance(double xOne, double yOne, double xTwo, double yTwo) {
 
 void *monteWorker(void *arg) {
     Worker_Input *input = (Worker_Input *) arg;
-    bool experimentsDone = false;
     double experimentX;
     double experimentY;
     double experimentDist;
@@ -131,7 +133,7 @@ void *monteWorker(void *arg) {
     int successfulExperiments;
     int totalExperiments;
 
-    while(!experimentsDone) {
+    while(!*experimentsDone) {
         successfulExperiments = 0;
         totalExperiments = 0;
         for (i = 0; i < input->experimentCount; i++) {
@@ -147,20 +149,49 @@ void *monteWorker(void *arg) {
                 successfulExperiments++;
             totalExperiments++;
         }
-        printf("Worker thread %d calculated %d successful experiments with %d total\n",
-                input->thdId, successfulExperiments, totalExperiments);
+
+        // Update globals
+        pthread_mutex_lock(successCount->lock);
+        successCount->value += successfulExperiments;
+        pthread_mutex_unlock(successCount->lock);
+        pthread_mutex_lock(totalCount->lock);
+        totalCount->value += totalExperiments;
+        pthread_mutex_unlock(totalCount->lock);
+
         pthread_barrier_wait(calcBarrier);
-        experimentsDone = true;
+        pthread_barrier_wait(checkBarrier);
     }
 
     pthread_exit(NULL);
 }
 
 void *monteControl(void *arg) {
-    double *delta;
-    delta = (double *) arg;
-    printf("Coordinator created with delta: %lf\n", *delta);
-    pthread_barrier_wait(calcBarrier);
+    double *delta = (double *) arg;
+    double circleRadius = CIRCLE_DIAMETER / 2.0;
+    double circleAreaEstimation;
+    double currPiEstimation = 0.0;
+    double pastPiEstimation = 0.0;
+    int round = 0;
+
+    while(!*experimentsDone) {
+        pthread_barrier_wait(calcBarrier);
+
+        pthread_mutex_lock(successCount->lock);
+        pthread_mutex_lock(totalCount->lock);
+        circleAreaEstimation = (double) successCount->value / totalCount->value;
+        pthread_mutex_unlock(successCount->lock);
+        pthread_mutex_unlock(totalCount->lock);
+
+        currPiEstimation = circleAreaEstimation / pow(circleRadius, 2.0);
+        printf("Round %d's pi estimation: %lf\n", round, currPiEstimation);
+
+        if (fabs(pastPiEstimation - currPiEstimation) <= *delta)
+            *experimentsDone = true;
+        pastPiEstimation = currPiEstimation;
+
+        round++;
+        pthread_barrier_wait(checkBarrier);
+    }
 
     pthread_exit(NULL);
 }
