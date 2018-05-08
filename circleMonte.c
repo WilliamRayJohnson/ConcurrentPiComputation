@@ -7,7 +7,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <math.h>
 #include <pthread.h>
+
+#define CIRCLE_DIAMETER 1.0
 
 void *monteWorker(void *arg);
 void *monteControl(void *arg);
@@ -110,17 +113,43 @@ double monteExperiment(double min, double max) {
     return value;
 }
 
+double calcDistance(double xOne, double yOne, double xTwo, double yTwo) {
+    double xPart = pow((xTwo - xOne), 2.0);
+    double yPart = pow((yTwo - yOne), 2.0);
+    double distance = sqrt(xPart + yPart);
+    return distance;
+}
+
 void *monteWorker(void *arg) {
     Worker_Input *input = (Worker_Input *) arg;
     bool experimentsDone = false;
-    double experiment;
+    double experimentX;
+    double experimentY;
+    double experimentDist;
+    double circleCenter = CIRCLE_DIAMETER / 2.0;
+    int i;
+    int successfulExperiments;
+    int totalExperiments;
 
     while(!experimentsDone) {
-        pthread_mutex_lock(rand_lock);
-        experiment = monteExperiment(0.0, 1.0);
-        pthread_mutex_unlock(rand_lock);
+        successfulExperiments = 0;
+        totalExperiments = 0;
+        for (i = 0; i < input->experimentCount; i++) {
+            pthread_mutex_lock(rand_lock);
+            experimentX = monteExperiment(0.0, CIRCLE_DIAMETER);
+            pthread_mutex_unlock(rand_lock);
+            pthread_mutex_lock(rand_lock);
+            experimentY = monteExperiment(0.0, CIRCLE_DIAMETER);
+            pthread_mutex_unlock(rand_lock);
+            experimentDist = calcDistance(experimentX, experimentY,
+                    circleCenter, circleCenter);
+            if (experimentDist <= circleCenter)
+                successfulExperiments++;
+            totalExperiments++;
+        }
+        printf("Worker thread %d calculated %d successful experiments with %d total\n",
+                input->thdId, successfulExperiments, totalExperiments);
         pthread_barrier_wait(calcBarrier);
-        printf("Worker thread %d: %lf\n", input->thdId, experiment);
         experimentsDone = true;
     }
 
