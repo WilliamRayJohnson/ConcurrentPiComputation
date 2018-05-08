@@ -6,10 +6,13 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <pthread.h>
 
 void *monteWorker(void *arg);
 void *monteControl(void *arg);
+
+double monteExperiment(double min , double max);
 
 typedef struct workerInput {
     int experimentCount;
@@ -23,6 +26,11 @@ typedef struct atomic_i {
 
 Atomic_Int *successCount;
 Atomic_Int *totalCount;
+
+pthread_mutex_t *rand_lock;
+
+pthread_barrier_t *calcBarrier;
+pthread_barrier_t *checkBarrier;
 
 int main(int argc, char *argv[]) {
     int threadCount;
@@ -39,6 +47,16 @@ int main(int argc, char *argv[]) {
     sscanf(argv[2], "%d", &iterationCount);
     sscanf(argv[3], "%lf", &delta);
 
+    // Initialize barriers for pi calculation and delta check
+    calcBarrier = (pthread_barrier_t *) malloc(sizeof(pthread_barrier_t));
+    pthread_barrier_init(calcBarrier, NULL, threadCount + 1);
+    checkBarrier = (pthread_barrier_t *) malloc(sizeof(pthread_barrier_t));
+    pthread_barrier_init(checkBarrier, NULL, threadCount + 1);
+
+    rand_lock = (pthread_mutex_t *) malloc(sizeof(pthread_mutex_t));
+    pthread_mutex_init(rand_lock, NULL);
+
+    // Initialize global variables involved in pi approximation
     successCount = (Atomic_Int *) malloc(sizeof(Atomic_Int));
     successCount->value = 0;
     successCount->lock = (pthread_mutex_t *) malloc(sizeof(pthread_mutex_t));
@@ -48,12 +66,14 @@ int main(int argc, char *argv[]) {
     totalCount->lock = (pthread_mutex_t *) malloc(sizeof(pthread_mutex_t));
     pthread_mutex_init(totalCount->lock, NULL);
 
+    // Initialize cooridinator thread
     pthread_t *coordinatorThd = (pthread_t *) malloc(sizeof(pthread_t));
     if (pthread_create(coordinatorThd, NULL, monteControl, (void *) &delta)) {
         fprintf(stderr, "Error creating coordinator thread");
         exit(-1);
     }
 
+    // Initialize worker threads
     Worker_Input *thdArg;
     pthread_t *workerThd[threadCount];
     for (i = 0; i < threadCount; i++) {
@@ -82,9 +102,27 @@ int main(int argc, char *argv[]) {
     exit(0);
 }
 
+double monteExperiment(double min, double max) {
+    double value;
+    double range = (max - min);
+    double div = RAND_MAX / range;
+    value = min + (rand() / div);
+    return value;
+}
+
 void *monteWorker(void *arg) {
     Worker_Input *input = (Worker_Input *) arg;
-    printf("Worker %d created\n", input->thdId);
+    bool experimentsDone = false;
+    double experiment;
+
+    while(!experimentsDone) {
+        pthread_mutex_lock(rand_lock);
+        experiment = monteExperiment(0.0, 1.0);
+        pthread_mutex_unlock(rand_lock);
+        pthread_barrier_wait(calcBarrier);
+        printf("Worker thread %d: %lf\n", input->thdId, experiment);
+        experimentsDone = true;
+    }
 
     pthread_exit(NULL);
 }
@@ -93,6 +131,7 @@ void *monteControl(void *arg) {
     double *delta;
     delta = (double *) arg;
     printf("Coordinator created with delta: %lf\n", *delta);
+    pthread_barrier_wait(calcBarrier);
 
     pthread_exit(NULL);
 }
