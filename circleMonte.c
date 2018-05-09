@@ -187,7 +187,7 @@ void *monteWorker(void *arg) {
 void *monteControl(void *arg) {
     double *delta = (double *) arg;
     double circleRadius = CIRCLE_DIAMETER / 2.0;
-    double circleAreaEstimation;
+    double circleAreaEstimation = 0.0;
     double currPiEstimation = 0.0;
     double pastPiEstimation = 0.0;
     int round = 0;
@@ -198,7 +198,8 @@ void *monteControl(void *arg) {
 
         pthread_mutex_lock(successCount->lock);
         pthread_mutex_lock(totalCount->lock);
-        circleAreaEstimation = (double) successCount->value / totalCount->value;
+        if (totalCount->value != 0.0)
+            circleAreaEstimation = (double) successCount->value / totalCount->value;
         pthread_mutex_unlock(successCount->lock);
         pthread_mutex_unlock(totalCount->lock);
 
