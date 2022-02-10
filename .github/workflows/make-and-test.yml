@@ -28,6 +28,6 @@ jobs:
     - uses: actions/download-artifact@v2.1.0
       with:
         name: make artifact
-        path: circleMonte
+        path: ./
     - name: run test
       run: ./testMonte.sh
