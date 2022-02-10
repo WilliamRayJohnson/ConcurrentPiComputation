@@ -25,5 +25,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - uses: actions/download-artifact@v2.1.0
+      with:
+        name: make artifact
+        path: circleMonte
     - name: run test
       run: ./testMonte.sh
