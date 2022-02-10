@@ -9,11 +9,15 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
     - uses: actions/checkout@v2
     - name: make
       run: make
+    - uses: actions/upload-artifact@v2.3.1
+      with:
+        name: Object file
+        path: circleMonte
 
   test:
     runs-on: ubuntu-latest
